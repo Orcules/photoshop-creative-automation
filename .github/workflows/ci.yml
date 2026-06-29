@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # requirements.txt includes Windows-only / COM packages
+      # (photoshop-python-api), so install only what the tests need.
+      - name: Install test dependencies
+        run: pip install flask pytest python-dotenv
+      - name: Compile check (non-COM modules)
+        run: python -m py_compile color_automation.py local_agent/task_store.py local_agent/agent.py cloud_ui/app.py main.py
+      - name: Run tests
+        run: pytest tests/ -v

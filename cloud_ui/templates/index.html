@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Creative Automation — Task Dashboard</title>
+  <style>
+    :root { --bg:#0f1117; --card:#171a23; --line:#262a36; --fg:#e6e8ee; --muted:#9aa3b2; --accent:#4f8cff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:24px 28px; border-bottom:1px solid var(--line); }
+    h1 { margin:0; font-size:20px; }
+    .sub { color:var(--muted); font-size:13px; margin-top:6px; }
+    main { padding:24px 28px; max-width:1000px; }
+    .row { display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+    input[type=text] { background:#12151d; border:1px solid var(--line); color:var(--fg); padding:8px 10px; border-radius:8px; font-size:14px; min-width:200px; }
+    button { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+    button.secondary { background:#222633; color:var(--fg); border:1px solid var(--line); }
+    button.danger { background:#3d2326; color:#f0888f; border:1px solid #5a343a; padding:4px 10px; font-size:12px; }
+    table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    th, td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px; }
+    th { color:var(--muted); font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .pill { padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pending { background:#3a3320; color:#e8c46a; }
+    .processing { background:#1f3550; color:#7fb0ff; }
+    .stopped { background:#33272e; color:#c99ab0; }
+    .done { background:#1f3b2a; color:#74d99f; }
+    .error { background:#3d2326; color:#f0888f; }
+    .empty { color:var(--muted); padding:24px 14px; }
+    code { background:#222633; padding:2px 6px; border-radius:6px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Creative Automation — Task Dashboard</h1>
+    <div class="sub">Local-agent / cloud-UI control plane for batch Photoshop ad-creative generation.</div>
+  </header>
+  <main>
+    <div class="row">
+      <input type="text" id="taskTitle" placeholder="Task title" />
+      <input type="text" id="sheetName" placeholder="Sheet name (worksheet tab)" />
+      <button onclick="createTask()">+ Create task</button>
+      <button class="secondary" onclick="loadTasks()">↻ Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>Task ID</th><th>Task</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <p class="sub" style="margin-top:18px">
+      API: <code>GET /tasks</code> · <code>POST /tasks</code> (create) · <code>POST /tasks/&lt;id&gt;/cancel</code> · <code>POST /tasks/&lt;id&gt;/delete</code>.
+      See the <a href="https://github.com/Orcules/photoshop-creative-automation" style="color:var(--accent)">README</a> for the full workflow.
+    </p>
+  </main>
+  <script>
+    async function createTask() {
+      const title = document.getElementById('taskTitle').value.trim() || 'Task';
+      const sheetName = document.getElementById('sheetName').value.trim();
+      const body = { title, script: 'main.py', kwargs: {} };
+      if (sheetName) body.kwargs.sheet_name = sheetName;
+      try {
+        const res = await fetch('/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('sheetName').value = '';
+        loadTasks();
+      } catch (e) { alert('Create failed: ' + e.message); }
+    }
+    async function cancelTask(id) {
+      try {
+        const res = await fetch('/tasks/' + id + '/cancel', { method: 'POST' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        loadTasks();
+      } catch (e) { alert('Cancel failed: ' + e.message); }
+    }
+    async function loadTasks() {
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
+      try {
+        const res = await fetch('/tasks');
+        const tasks = await res.json();
+        if (!Array.isArray(tasks) || tasks.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No tasks yet — create one above.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = tasks.map(t => {
+          const s = (t.status || 'pending').toLowerCase();
+          const cancellable = s === 'pending' || s === 'processing';
+          return `<tr>
+            <td><code>${t.id ?? '—'}</code></td>
+            <td>${t.title ?? t.script ?? '—'}</td>
+            <td><span class="pill ${s}">${s}</span></td>
+            <td>${t.created_at ?? '—'}</td>
+            <td>${cancellable ? `<button class="danger" onclick="cancelTask('${t.id}')">Cancel</button>` : ''}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Could not load tasks (' + e.message + ').</td></tr>';
+      }
+    }
+    loadTasks();
+  </script>
+</body>
+</html>
